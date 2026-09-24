@@ -1,0 +1,11 @@
+# container backups must not land in the repo
+*.tar
+*.tar.gz
+*.tgz
+*.tar.xz
+*.tar.zst
+
+# local scratch
+*.log
+.direnv/
+.DS_Store
