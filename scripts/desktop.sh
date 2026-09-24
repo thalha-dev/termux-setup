@@ -86,25 +86,21 @@ else
   sleep 10
 fi
 
-# wait for XFCE to actually be up (panel process = good proxy), max 90 s
-i=0; until pgrep -x xfce4-panel >/dev/null 2>&1 || [ "\$i" -ge 90 ]; do
-  sleep 1; i=\$((i+1))
-done
-echo "xfce4-panel present after \${i}s (or timeout)"
-
-# first-draw fix: repaint the desktop layer once XFCE is up, then once more
-sleep 3
-xfdesktop --reload >/dev/null 2>&1 || (nohup xfdesktop >/dev/null 2>&1 &)
-sleep 6
-xfdesktop --reload >/dev/null 2>&1 || true
-echo "repaint nudges done"
-
-# revive the panel only if it is genuinely dead (never blindly restart it —
-# a restart while the session is coming up kills it and pops a DBus error)
-if ! pgrep -x xfce4-panel >/dev/null 2>&1; then
-  nohup xfce4-panel >/dev/null 2>&1 &
-  echo "panel was dead — revived"
-fi
+# first-draw fix runs in the BACKGROUND, concurrently with the session:
+# reload the desktop layer once it exists. Never touch a live panel —
+# a blind 'xfce4-panel -r' mid-startup kills it and pops a DBus error.
+(
+  for w in 8 16; do
+    sleep "\$w"
+    if pgrep -x xfdesktop >/dev/null 2>&1; then
+      xfdesktop --reload >/dev/null 2>&1 || true
+      echo "repaint nudge done (+\${w}s)"
+    else
+      echo "no xfdesktop at +\${w}s"
+    fi
+  done
+  pgrep -x xfwm4 >/dev/null 2>&1 || echo "WARNING: no window manager running"
+) &
 
 # compositing under Termux:X11 = black desktop / missing panel; keep it off
 xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/dev/null 2>&1 || true
