@@ -53,6 +53,13 @@ log "Launching XFCE inside the container as '${UBU_USER}' (detached)..."
 proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 --detach -- \
   /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; dbus-launch --exit-with-session startxfce4"
 
+# Known first-draw race: xfdesktop can paint before the Termux:X11 surface is
+# ready and stay black. A --reload makes the running instance repaint.
+log "Waiting ~8 s, then nudging xfdesktop to repaint..."
+sleep 8
+proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 -- \
+  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; xfdesktop --reload 2>/dev/null || true; xfce4-panel -r 2>/dev/null || true"
+
 cat <<EOF
 
 XFCE is starting. Check the Termux:X11 app on screen (give it ~10 s first time).
