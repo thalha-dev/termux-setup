@@ -16,6 +16,7 @@ warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 CONTAINER="${PD_CONTAINER_NAME:-ubuntu}"
+UBU_USER="${PD_UBUNTU_USER:-thalha}"
 DISPLAY_NUM="${PD_DISPLAY:-:1}"
 X11_ARGS="${PD_X11_ARGS:-}"
 ROOTFS="$PREFIX/var/lib/proot-distro/containers/$CONTAINER/rootfs"
@@ -26,9 +27,17 @@ ROOTFS="$PREFIX/var/lib/proot-distro/containers/$CONTAINER/rootfs"
   die "XFCE not installed in the container — run scripts/install-desktop.sh first."
 command -v termux-x11 >/dev/null 2>&1 || die "termux-x11 missing — run scripts/install-x11.sh first."
 
+# Fall back to root only if the user was never created in this container.
+if ! grep -q "^${UBU_USER}:" "$ROOTFS/etc/passwd" 2>/dev/null; then
+  warn "User '$UBU_USER' not found in the container — launching as root."
+  warn "(Re-run scripts/setup-ubuntu.sh to create it, or set PD_UBUNTU_USER.)"
+  UBU_USER="root"
+fi
+
 log "Stopping any stale termux-x11 instance..."
 pkill termux-x11 2>/dev/null || true
 sleep 1
+proot-distro kill "$CONTAINER" 2>/dev/null || true
 
 log "Starting Termux:X11 server on display ${DISPLAY_NUM}..."
 # $X11_ARGS is intentionally unquoted: it may hold multiple flags
@@ -40,8 +49,8 @@ log "Opening the Termux:X11 activity on the phone..."
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || \
   warn "Could not auto-open the app — tap the Termux:X11 icon on your launcher."
 
-log "Launching XFCE inside the container (detached)..."
-proot-distro login "$CONTAINER" --shared-tmp --shared-x11 --detach -- \
+log "Launching XFCE inside the container as '${UBU_USER}' (detached)..."
+proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 --detach -- \
   /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; dbus-launch --exit-with-session startxfce4"
 
 cat <<EOF

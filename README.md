@@ -103,8 +103,7 @@ Env knobs (all optional):
 |---|---|---|
 | `PD_CONTAINER_NAME` | `ubuntu` | setup / desktop / backup / restore |
 | `PD_IMAGE` | `ubuntu:24.04` | setup-ubuntu |
-| `PD_UBUNTU_USER` | `thalha` | setup-ubuntu |
-| `PD_DESKTOP` | `xfce` | desktop |
+| `PD_UBUNTU_USER` | `thalha` | setup-ubuntu / desktop (the desktop session runs as this user) |
 | `PD_DISPLAY` | `:1` | desktop |
 | `PD_X11_ARGS` | *(empty)* | desktop (extra termux-x11 flags) |
 
