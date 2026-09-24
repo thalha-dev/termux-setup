@@ -24,25 +24,24 @@ cd termux-setup
 
 bash bootstrap.sh                 # 1. update Termux + install proot-distro
 bash scripts/install-x11.sh       # 2. x11-repo + termux-x11-nightly companion
-bash scripts/setup-ubuntu.sh      # 3. pull ubuntu:24.04, create user, sudo, locale
-proot-distro login ubuntu         # 4. you are in real Ubuntu. That's the boot.
+bash scripts/install-desktop.sh   # 3. XFCE natively in Termux (x11-repo packages)
+bash scripts/setup-ubuntu.sh      # 4. pull ubuntu:24.04 for CLI/server work
+bash scripts/desktop.sh           # 5. desktop on Termux:X11
 ```
 
-Optional, when you want the GUI:
-
-```sh
-bash scripts/install-desktop.sh   # XFCE inside the container (~500 MB)
-bash scripts/desktop.sh           # launch Termux:X11 + XFCE, opens the app
-```
+The desktop runs **natively in Termux** (that's what `install-desktop.sh`
+installs, and what the official termux-x11 README recommends) — the
+container route needed `--shared-tmp` binds and cross-prefix user mapping
+that produced black screens on this device.
 
 Utilities:
 
 ```sh
 bash scripts/sanity.sh            # environment report: Android/HyperOS, killer state, disk
+bash scripts/container-app.sh <app>  # run a container GUI app on the Termux desktop
 bash scripts/backup.sh            # container -> ~/storage/downloads/*.tar.gz
 bash scripts/restore.sh <file>    # restore (overwrites the container)
-bash scripts/cleanup.sh config    # fresh XFCE profile (black-desktop first aid)
-bash scripts/cleanup.sh desktop   # + remove desktop packages from the container
+bash scripts/cleanup.sh desktop   # remove desktop packages from the container
 bash scripts/cleanup.sh container # + DELETE the whole Ubuntu container
 bash scripts/cleanup.sh all       # + remove Termux-side X11 packages too
 ```
@@ -77,9 +76,10 @@ when it comes to killing background processes:
   `termux-x11-universal-sharedUid-debug.apk` (same GitHub nightly release).
   Android throttles apps that aren't on screen — the sharedUid variant runs
   *as part of* Termux, so the desktop stays fast when Termux goes background.
-- **`--shared-tmp`**: Termux:X11's socket lives in Termux's `$PREFIX/tmp`;
-  the container must bind it at `/tmp` or the desktop can't reach the X
-  server. `--shared-x11` (proot-distro 5.x) binds the X11 socket dir too.
+- **`--shared-tmp` / `--shared-x11`**: only needed to run *container* apps on
+  the Termux desktop (`scripts/container-app.sh`). Termux:X11's socket lives
+  in Termux's `$PREFIX/tmp`; `--shared-tmp` binds it at the container's `/tmp`
+  and `--shared-x11` (proot-distro 5.x) binds the X11 socket dir too.
 - **Ports ≥ 1024 only**: no real root under proot. Privileged ports can be
   faked with `proot-distro login --redirect-ports` (80 → 2080).
 - **No systemd**: use `service`, `runit`, or plain foreground processes.

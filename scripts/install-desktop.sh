@@ -1,42 +1,44 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# install-desktop.sh — OPTIONAL: XFCE inside the Ubuntu container (~500 MB).
-# Run this only when you want the GUI. Then launch with scripts/desktop.sh.
+# install-desktop.sh — install XFCE NATIVELY in Termux (official x11-repo
+# packages; the desktop runs in the Termux prefix, no container involved).
+#
+# The Ubuntu container remains available for CLI/server work; run its GUI
+# apps on this desktop with scripts/container-app.sh.
 set -Eeuo pipefail
 
-log()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
-die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
-
-CONTAINER="${PD_CONTAINER_NAME:-ubuntu}"
-ROOTFS="$PREFIX/var/lib/proot-distro/containers/$CONTAINER/rootfs"
+log() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
+die() { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -n "${TERMUX_VERSION:-}" ] || die "Run this inside Termux."
-[ -d "$ROOTFS" ] || die "Container '$CONTAINER' not found — run scripts/setup-ubuntu.sh first."
 
-command -v termux-x11 >/dev/null 2>&1 || \
-  die "termux-x11 companion missing — run scripts/install-x11.sh first."
+log "Enabling the X11 repository..."
+pkg install -y x11-repo
 
-log "Installing/refreshing the desktop packages inside the container (fast when already installed)..."
-proot-distro login "$CONTAINER" -- /bin/bash -s <<'EOS'
-set -Eeuo pipefail
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get install -y --no-install-recommends \
-  xfce4 xfce4-terminal dbus-x11 \
-  desktop-base xfdesktop4 \
+log "Installing XFCE + friends in Termux (fast — these are native arm64 builds)..."
+pkg install -y \
+  xfce4 xfce4-terminal \
   xfce4-whiskermenu-plugin xfce4-screenshooter \
-  mousepad ristretto thunar-archive-plugin \
+  mousepad ristretto \
+  dbus dbus-x11 \
   xterm mesa-utils x11-xserver-utils \
-  fonts-dejavu adwaita-icon-theme tango-icon-theme
-EOS
+  fonts-dejavu
 
-[ -x "$ROOTFS/usr/bin/startxfce4" ] || die "startxfce4 still missing after install."
+log "Installing a light browser in Termux..."
+pkg install -y falkon || log "falkon skipped — install a browser later: pkg install falkon"
+
+command -v startxfce4 >/dev/null 2>&1 || die "startxfce4 missing after install?!"
 
 cat <<'EOF'
 
-XFCE installed. Launch the desktop with:
+XFCE is installed natively in Termux. Start it with:
   bash scripts/desktop.sh
 
-The terminal running desktop.sh must stay in the foreground session (or use
-Termux's wake lock). Phone tip: in Termux:X11's Preferences you can enable
-"Fullscreen" and adjust the extra-keys row later.
+Run apps from the Ubuntu container on this desktop:
+  bash scripts/container-app.sh <app>     # e.g. firefox, gimp
+  (install those apps inside the container first:
+   proot-distro login ubuntu  →  apt install <app>)
+
+Notes:
+  - Wallpaper/theme: right-click the desktop -> Desktop Settings.
+  - Container apps appear as ordinary windows on this same desktop.
 EOF

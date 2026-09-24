@@ -8,7 +8,6 @@
 set -Eeuo pipefail
 
 CONTAINER="${PD_CONTAINER_NAME:-ubuntu}"
-UBU_USER="${PD_UBUNTU_USER:-thalha}"
 LEVEL="${1:-}"
 PD_BASE="$PREFIX/var/lib/proot-distro"
 ROOTFS="$PD_BASE/containers/$CONTAINER/rootfs"
@@ -28,8 +27,8 @@ pkill termux-x11 2>/dev/null || true
 proot-distro kill "$CONTAINER" 2>/dev/null || true
 
 if [ "$LEVEL" = config ] || [ "$LEVEL" = desktop ] || [ "$LEVEL" = container ] || [ "$LEVEL" = all ]; then
-  if [ -d "$ROOTFS" ]; then
-    log "Backing up and resetting XFCE config for '${UBU_USER}'..."
+  if [ -d "$ROOTFS" ] && [ "$LEVEL" != config ]; then
+    log "Resetting XFCE config inside the container..."
     run_in_container <<'EOS'
 set -e
 for h in /home/* /root; do
@@ -37,6 +36,13 @@ for h in /home/* /root; do
   mv "$h/.config/xfce4" "$h/.config/xfce4.bak.$(date +%Y%m%d%H%M%S)"
 done
 EOS
+  fi
+  if [ "$LEVEL" = config ]; then
+    log "Resetting the Termux-side XFCE profile..."
+    [ -d "$HOME/.config/xfce4" ] && \
+      mv "$HOME/.config/xfce4" "$HOME/.config/xfce4.bak.$(date +%Y%m%d%H%M%S)"
+    log "Termux XFCE profile reset. Start the desktop again: bash scripts/desktop.sh"
+    exit 0
   fi
 fi
 
