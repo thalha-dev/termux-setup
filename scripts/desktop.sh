@@ -86,15 +86,25 @@ else
   sleep 10
 fi
 
-# repaint nudges: the first draw can land before the phone surface is ready
-(
-  for w in 5 8 12; do
-    sleep "\$w"
-    xfdesktop --reload >/dev/null 2>&1 || (nohup xfdesktop >/dev/null 2>&1 &)
-    xfce4-panel -r   >/dev/null 2>&1 || true
-    echo "repaint nudge done (+\${w}s)"
-  done
-) &
+# wait for XFCE to actually be up (panel process = good proxy), max 90 s
+i=0; until pgrep -x xfce4-panel >/dev/null 2>&1 || [ "\$i" -ge 90 ]; do
+  sleep 1; i=\$((i+1))
+done
+echo "xfce4-panel present after \${i}s (or timeout)"
+
+# first-draw fix: repaint the desktop layer once XFCE is up, then once more
+sleep 3
+xfdesktop --reload >/dev/null 2>&1 || (nohup xfdesktop >/dev/null 2>&1 &)
+sleep 6
+xfdesktop --reload >/dev/null 2>&1 || true
+echo "repaint nudges done"
+
+# revive the panel only if it is genuinely dead (never blindly restart it —
+# a restart while the session is coming up kills it and pops a DBus error)
+if ! pgrep -x xfce4-panel >/dev/null 2>&1; then
+  nohup xfce4-panel >/dev/null 2>&1 &
+  echo "panel was dead — revived"
+fi
 
 # compositing under Termux:X11 = black desktop / missing panel; keep it off
 xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/dev/null 2>&1 || true
