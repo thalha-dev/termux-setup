@@ -15,13 +15,16 @@ log "Enabling the X11 repository..."
 pkg install -y x11-repo
 
 log "Installing XFCE + friends in Termux (fast — these are native arm64 builds)..."
+# Names are Termux names (verified against the termux-x11 index):
+# xfdesktop (not xfdesktop4), mesa-demos (not mesa-utils), xorg-xdpyinfo,
+# ttf-dejavu, dbus (no dbus-x11), no xterm in Termux.
 pkg install -y \
-  xfce4 xfce4-terminal \
+  xfce4 xfdesktop xfce4-terminal \
   xfce4-whiskermenu-plugin xfce4-screenshooter \
-  mousepad ristretto \
-  dbus dbus-x11 \
-  xterm mesa-utils x11-xserver-utils \
-  fonts-dejavu
+  mousepad ristretto thunar-archive-plugin gvfs \
+  dbus dbus-glib \
+  mesa-demos xorg-xdpyinfo \
+  ttf-dejavu adwaita-icon-theme hicolor-icon-theme
 
 log "Installing a light browser in Termux..."
 pkg install -y falkon || log "falkon skipped — install a browser later: pkg install falkon"
