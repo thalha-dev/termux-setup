@@ -89,6 +89,7 @@ when it comes to killing background processes:
 
 | Symptom | Cause / fix |
 |---|---|
+| Desktop loads but wallpaper black, bare X cursor | `xfdesktop` not running — `pgrep -a xfdesktop`; restart it or check its log. Also run `scripts/install-desktop.sh` again (now installs `desktop-base` + `xfdesktop4` explicitly) |
 | `[Process completed (signal 9)]` | Phantom process killer — do checklist steps 1–5, reboot |
 | Desktop is slow when switching apps | Replace Termux:X11 APK with the `sharedUid` variant |
 | Black screen, cursor only | Run `scripts/desktop.sh` with `PD_X11_ARGS="-legacy-drawing"` |

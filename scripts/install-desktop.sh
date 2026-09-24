@@ -26,6 +26,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y --no-install-recommends \
   xfce4 xfce4-terminal dbus-x11 \
+  desktop-base xfdesktop4 \
   fonts-dejavu adwaita-icon-theme tango-icon-theme
 EOS
 
