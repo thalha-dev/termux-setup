@@ -11,15 +11,11 @@ ROOTFS="$PREFIX/var/lib/proot-distro/containers/$CONTAINER/rootfs"
 
 [ -n "${TERMUX_VERSION:-}" ] || die "Run this inside Termux."
 [ -d "$ROOTFS" ] || die "Container '$CONTAINER' not found — run scripts/setup-ubuntu.sh first."
-if [ -x "$ROOTFS/usr/bin/startxfce4" ]; then
-  log "XFCE is already installed."
-  exit 0
-fi
 
 command -v termux-x11 >/dev/null 2>&1 || \
   die "termux-x11 companion missing — run scripts/install-x11.sh first."
 
-log "Installing XFCE desktop inside the container (this takes a while)..."
+log "Installing/refreshing the desktop packages inside the container (fast when already installed)..."
 proot-distro login "$CONTAINER" -- /bin/bash -s <<'EOS'
 set -Eeuo pipefail
 export DEBIAN_FRONTEND=noninteractive
