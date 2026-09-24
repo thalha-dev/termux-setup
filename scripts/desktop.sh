@@ -1,11 +1,17 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # desktop.sh — launch Termux:X11 + an XFCE session inside the Ubuntu container.
 #
-# Flow (per termux-x11 README "Using with proot environment"):
+# Flow:
 #   1. start the X server on the Termux side (background)
 #   2. open the Termux:X11 activity on the phone
-#   3. run the desktop session inside the container, detached
-#      (--shared-tmp/--shared-x11 give it access to the X socket)
+#   3. run a session orchestrator inside the container (detached) that:
+#        - exports a sane session env (XDG_RUNTIME_DIR, software GL)
+#        - disables xfwm4 compositing (the #1 cause of black desktops and
+#          vanishing panels on Termux:X11)
+#        - starts XFCE once the X server is reachable
+#        - nudges xfdesktop/xfce4-panel to repaint a few times (first-draw
+#          race: without this the desktop can stay black until a manual
+#          `xfdesktop --reload`)
 #
 # Stop it: expand the Termux:X11 notification -> Exit, then:
 #   pkill termux-x11 && proot-distro kill "$PD_CONTAINER_NAME"
@@ -34,7 +40,7 @@ if ! grep -q "^${UBU_USER}:" "$ROOTFS/etc/passwd" 2>/dev/null; then
   UBU_USER="root"
 fi
 
-log "Stopping any stale termux-x11 instance..."
+log "Stopping any stale X server / container sessions..."
 pkill termux-x11 2>/dev/null || true
 sleep 1
 proot-distro kill "$CONTAINER" 2>/dev/null || true
@@ -49,20 +55,44 @@ log "Opening the Termux:X11 activity on the phone..."
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || \
   warn "Could not auto-open the app — tap the Termux:X11 icon on your launcher."
 
-log "Launching XFCE inside the container as '${UBU_USER}' (detached)..."
+log "Launching session orchestrator inside the container as '${UBU_USER}' (detached)..."
 proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 --detach -- \
-  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; dbus-launch --exit-with-session startxfce4"
+  /bin/bash -s <<EOS
+set -u
+export DISPLAY="${DISPLAY_NUM}"
+export XDG_RUNTIME_DIR="\$HOME/.cache/xdg-runtime"
+mkdir -p "\$XDG_RUNTIME_DIR"; chmod 700 "\$XDG_RUNTIME_DIR"
+# deterministic GL under proot: no hardware paths that silently fail
+export LIBGL_ALWAYS_SOFTWARE=1
+export GDK_BACKEND=x11
 
-# Known first-draw race: xfdesktop can paint before the Termux:X11 surface is
-# ready and stay black. A --reload makes the running instance repaint.
-log "Waiting ~8 s, then nudging xfdesktop to repaint..."
-sleep 8
-proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 -- \
-  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; xfdesktop --reload 2>/dev/null || true; xfce4-panel -r 2>/dev/null || true"
+# wait until the X server accepts connections (max ~40 s)
+if command -v xdpyinfo >/dev/null 2>&1; then
+  i=0; until xdpyinfo >/dev/null 2>&1; do
+    i=\$((i+1)); [ \$i -ge 40 ] && break; sleep 1
+  done
+else
+  sleep 10
+fi
+
+dbus-launch --exit-with-session bash -c '
+  # compositing under Termux:X11 = black desktop / missing panel; keep it off
+  xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/dev/null 2>&1
+  exec startxfce4
+'
+
+# repaint nudges: the first draw can land before the phone surface is ready
+for wait in 5 8 12; do
+  sleep "\$wait"
+  xfdesktop --reload >/dev/null 2>&1 || (nohup xfdesktop >/dev/null 2>&1 &)
+  xfce4-panel -r   >/dev/null 2>&1 || true
+done
+EOS
 
 cat <<EOF
 
-XFCE is starting. Check the Termux:X11 app on screen (give it ~10 s first time).
+XFCE is starting. Give it ~15 s on first draw (the orchestrator repaints a
+few times; the desktop may flash once — that's the nudge working).
 
 Useful:
   proot-distro ps                      # see running container sessions
@@ -70,7 +100,7 @@ Useful:
   pkill termux-x11                     # stop the X server
   Restart anytime: bash scripts/desktop.sh
 
-If the screen is black: PD_X11_ARGS="-legacy-drawing" bash scripts/desktop.sh
-If colours look swapped: PD_X11_ARGS="-force-bgra" bash scripts/desktop.sh
-If fonts are huge: add '-dpi 120' via PD_X11_ARGS or fix XFCE Appearance DPI.
+Still black?  PD_X11_ARGS="-legacy-drawing" bash scripts/desktop.sh
+Swapped colours?  PD_X11_ARGS="-force-bgra" bash scripts/desktop.sh
+Fonts huge?  add '-dpi 120' via PD_X11_ARGS, or XFCE Appearance -> DPI.
 EOF

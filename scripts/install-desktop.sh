@@ -23,6 +23,9 @@ apt-get update -y
 apt-get install -y --no-install-recommends \
   xfce4 xfce4-terminal dbus-x11 \
   desktop-base xfdesktop4 \
+  xfce4-whiskermenu-plugin xfce4-screenshooter \
+  mousepad ristretto thunar-archive-plugin \
+  xterm mesa-utils x11-xserver-utils \
   fonts-dejavu adwaita-icon-theme tango-icon-theme
 EOS
 

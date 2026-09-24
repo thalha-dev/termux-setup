@@ -41,6 +41,10 @@ Utilities:
 bash scripts/sanity.sh            # environment report: Android/HyperOS, killer state, disk
 bash scripts/backup.sh            # container -> ~/storage/downloads/*.tar.gz
 bash scripts/restore.sh <file>    # restore (overwrites the container)
+bash scripts/cleanup.sh config    # fresh XFCE profile (black-desktop first aid)
+bash scripts/cleanup.sh desktop   # + remove desktop packages from the container
+bash scripts/cleanup.sh container # + DELETE the whole Ubuntu container
+bash scripts/cleanup.sh all       # + remove Termux-side X11 packages too
 ```
 
 ## Phone settings checklist (HyperOS)
