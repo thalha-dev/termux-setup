@@ -31,7 +31,9 @@ command -v startxfce4 >/dev/null 2>&1 || \
 mkdir -p "$HOME/.cache"
 
 log "Stopping any stale X server / XFCE session..."
-pkill termux-x11 2>/dev/null || true
+# -f: the X server runs under app_process; its name only appears in the
+# cmdline, so a bare 'pkill termux-x11' never matches it.
+pkill -f termux-x11 2>/dev/null || true
 pkill -f 'startxfce4|xfce4-session|xfwm4|xfdesktop|xfce4-panel' 2>/dev/null || true
 sleep 1
 
@@ -46,7 +48,9 @@ am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 
   warn "Could not auto-open the app — tap the Termux:X11 icon on your launcher."
 
 log "Preparing the session (no compositor, sane runtime dir)..."
-export XDG_RUNTIME_DIR="$PREFIX/tmp/xdg-runtime-$USER"
+# NOTE: Termux does not export $USER — use id(1); this died under set -u once
+RUNTIME_UID="$(id -u 2>/dev/null || echo 0)"
+export XDG_RUNTIME_DIR="$PREFIX/tmp/xdg-runtime-$RUNTIME_UID"
 mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
 
 # compositing under Termux:X11 = black desktop / missing panel; keep it off
@@ -62,14 +66,13 @@ nohup dbus-launch --exit-with-session bash -c '
 # wait for the panel to appear (max 60 s), then report state
 up=0
 for _ in $(seq 1 60); do
-  if pgrep -x xfce4-panel >/dev/null 2>&1; then up=1; break; fi
+  if pgrep -af startxfce4 >/dev/null 2>&1 && pgrep -x xfwm4 >/dev/null 2>&1; then up=1; break; fi
   sleep 1
 done
 if [ "$up" = 1 ]; then
   log "XFCE is up. Check the Termux:X11 app."
 else
-  warn "panel not detected after 60 s — check the log:"
-  warn "tail -40 $LOG"
+  warn "session not detected after 60 s — last log lines:"
   tail -20 "$LOG" || true
 fi
 
