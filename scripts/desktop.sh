@@ -34,7 +34,10 @@ log "Stopping any stale X server / XFCE session..."
 # -f: the X server runs under app_process; its name only appears in the
 # cmdline, so a bare 'pkill termux-x11' never matches it.
 pkill -f termux-x11 2>/dev/null || true
-pkill -f 'startxfce4|xfce4-session|xfwm4|xfdesktop|xfce4-panel' 2>/dev/null || true
+pkill -f 'startxfce4|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd' 2>/dev/null || true
+# a stale dbus-daemon hands out a dead socket address -> xfsettingsd fails
+# with 'Could not connect: No such file or directory'
+pkill -f dbus-daemon 2>/dev/null || true
 sleep 1
 
 log "Starting Termux:X11 server on display ${DISPLAY_NUM}..."
@@ -58,8 +61,13 @@ xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/de
 
 log "Starting XFCE (Termux-native, log: $LOG)..."
 : > "$LOG"
-nohup dbus-launch --exit-with-session bash -c '
+# shellcheck disable=SC2016  # the $(...) must expand inside the session shell
+nohup bash -c '
   export DISPLAY="'"${DISPLAY_NUM}"'"
+  # fresh session bus; its address must be in the env of EVERY XFCE
+  # component, or xfsettingsd dies with "Unable to contact settings server"
+  eval "$(dbus-launch --sh-syntax)" || exit 1
+  echo "dbus: $DBUS_SESSION_BUS_ADDRESS"
   exec startxfce4
 ' >>"$LOG" 2>&1 &
 
