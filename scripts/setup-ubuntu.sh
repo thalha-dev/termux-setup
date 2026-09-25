@@ -2,7 +2,7 @@
 # setup-ubuntu.sh — step 3: pull Ubuntu 24.04 as an OCI image with
 # proot-distro 5.x and configure a minimal, usable CLI environment.
 #
-# Deliberately minimal (no XFCE here — see scripts/install-desktop.sh):
+# Deliberately minimal CLI base (languages and heavier tooling come later):
 #   sudo (passwordless), en_US.UTF-8 locale, tzdata, git, curl, wget,
 #   nano, bash-completion, man, procps, iproute2, net-tools, less, unzip.
 #
@@ -72,5 +72,5 @@ Boot it:
 
 Inside you have: apt, git, curl, wget, nano, sudo (passwordless), locales.
 Note: no password was set on '${UBU_USER}' — use 'passwd ${UBU_USER}' inside
-if you ever want one. Next optional step: bash scripts/install-desktop.sh
+if you ever want one. Long work belongs in 'tmux' so disconnects don't kill it.
 EOF

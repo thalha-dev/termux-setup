@@ -42,7 +42,6 @@ if [ -d "$PD_BASE/containers" ]; then
     found=1
     name="$(basename "$d")"
     echo "  ${name}: $(du -sh "$d/rootfs" 2>/dev/null | cut -f1)"
-    [ -x "$d/rootfs/usr/bin/startxfce4" ] && echo "    xfce: installed" || echo "    xfce: not installed (CLI only)"
   done
   [ "$found" = 0 ] && echo "  (none installed — run scripts/setup-ubuntu.sh)"
 else
