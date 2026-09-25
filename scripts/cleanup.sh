@@ -1,11 +1,16 @@
 #!/data/data/com.termux/files/usr/bin/bash
 # cleanup.sh — undo pieces of the setup, in increasing levels of destruction.
 #
-#   bash scripts/cleanup.sh termux-desktop   # remove today's Termux-native XFCE (superseded)
-#   bash scripts/cleanup.sh config           # fresh XFCE profile inside the container
-#   bash scripts/cleanup.sh desktop          # + remove desktop packages from the container
-#   bash scripts/cleanup.sh container        # + DELETE the whole Ubuntu container
-#   bash scripts/cleanup.sh all              # + remove Termux-side X11/GPU packages
+#   bash scripts/cleanup.sh gui             # delete EVERYTHING GUI (see below)
+#   bash scripts/cleanup.sh termux-desktop  # remove today's Termux-native XFCE (superseded)
+#   bash scripts/cleanup.sh config          # fresh XFCE profile inside the container
+#   bash scripts/cleanup.sh desktop         # + remove desktop packages from the container
+#   bash scripts/cleanup.sh container       # + DELETE the whole Ubuntu container
+#   bash scripts/cleanup.sh all             # + remove Termux-side X11/GPU packages
+#
+# 'gui' = container desktop+Firefox+GL stack, Termux-side X11/GPU packages,
+# session artifacts and logs. KEEPS: the container itself (CLI), proot-distro,
+# git, Termux base. The Termux:X11 APK (Android app) is uninstalled manually.
 set -Eeuo pipefail
 
 CONTAINER="${PD_CONTAINER_NAME:-ubuntu}"
@@ -19,8 +24,8 @@ run_in_container() { proot-distro login "$CONTAINER" -- /bin/bash -s; }
 
 [ -n "${TERMUX_VERSION:-}" ] || die "Run this inside Termux."
 case "$LEVEL" in
-  termux-desktop|config|desktop|container|all) ;;
-  *) sed -n '2,7p' "$0"; exit 1 ;;
+  gui|termux-desktop|config|desktop|container|all) ;;
+  *) sed -n '2,10p' "$0"; exit 1 ;;
 esac
 
 log "Stopping sessions (X server needs -f: it runs under app_process)..."
@@ -29,6 +34,62 @@ pkill -f 'startxfce4|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfcon
 pkill -f virgl_test_server 2>/dev/null || true
 pkill -f dbus-daemon 2>/dev/null || true
 proot-distro kill "$CONTAINER" 2>/dev/null || true
+
+# ── gui: delete everything GUI in one pass ──────────────────────────────────
+if [ "$LEVEL" = gui ]; then
+  if [ -d "$ROOTFS" ]; then
+    log "[1/3] Container: removing desktop, Firefox, GL/Vulkan stack..."
+    run_in_container <<'EOS' || true
+set -e
+export DEBIAN_FRONTEND=noninteractive
+# drop the Firefox PPA (source + pin) first so nothing reinstalls the stub
+rm -f /etc/apt/sources.list.d/mozillateam-*.list /etc/apt/preferences.d/mozilla-firefox
+apt-get update -y
+apt-get purge -y -q \
+  'xfce4*' 'xfdesktop4' 'xfce4-goodies' 'xfce4-terminal' \
+  mousepad ristretto gvfs thunar-archive-plugin xterm \
+  desktop-base adwaita-icon-theme tango-icon-theme \
+  dbus-x11 dbus-user-session network-manager-gnome \
+  mesa-utils mesa-vulkan-drivers vulkan-tools glmark2 \
+  firefox firefox-esr >/dev/null 2>&1 || true
+apt-get autoremove -y -q
+rm -rf /home/*/.config/xfce4 /root/.config/xfce4 \
+       /home/*/.cache/xdg-runtime /root/.cache/xdg-runtime \
+       /opt/xd-session.sh /opt/xd-session.log
+echo "container GUI packages removed"
+EOS
+  fi
+
+  log "[2/3] Termux: removing X11/GPU packages and the native-desktop remnants..."
+  pkg uninstall -y \
+    termux-x11-nightly virglrenderer-android x11-repo \
+    xfce4 xfdesktop xfce4-terminal \
+    xfce4-whiskermenu-plugin xfce4-screenshooter \
+    mousepad ristretto thunar-archive-plugin gvfs \
+    dbus-glib mesa-demos xorg-xdpyinfo \
+    ttf-dejavu adwaita-icon-theme hicolor-icon-theme falkon 2>/dev/null || true
+  pkg autoremove -y 2>/dev/null || true
+
+  log "[3/3] Termux: removing profiles, session artifacts, logs..."
+  [ -d "$HOME/.config/xfce4" ] && \
+    mv "$HOME/.config/xfce4" "$HOME/.config/xfce4.bak.$(date +%Y%m%d%H%M%S)"
+  rm -rf "$PREFIX/tmp/xd-shm" "$PREFIX/tmp"/xdg-runtime-* \
+         "$HOME/.cache/xfce-session.log" "$HOME/.cache/termux-x11.log" \
+         "$HOME/.cache/virgl.log"
+
+  cat <<'EOF'
+
+GUI fully removed. Kept intact:
+  - the Ubuntu container (CLI-ready: proot-distro login ubuntu)
+  - proot-distro, git, Termux itself
+
+Manual step (apps can't be uninstalled from the CLI):
+  Settings -> Apps -> Termux:X11 -> Uninstall   (the APK you installed)
+
+Bring the desktop back anytime: bash scripts/install-desktop.sh
+EOF
+  exit 0
+fi
 
 # ── termux-desktop: the superseded Termux-native XFCE ───────────────────────
 if [ "$LEVEL" = termux-desktop ]; then

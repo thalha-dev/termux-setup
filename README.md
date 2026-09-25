@@ -41,6 +41,7 @@ bash scripts/sanity.sh            # environment report: Android/HyperOS, killer 
 bash scripts/container-app.sh <app>  # run one container app (e.g. glxgears, glmark2, firefox)
 bash scripts/backup.sh            # container -> ~/storage/downloads/*.tar.gz
 bash scripts/restore.sh <file>    # restore (overwrites the container)
+bash scripts/cleanup.sh gui       # delete EVERYTHING GUI (desktop, Firefox, X11/GPU pkgs)
 bash scripts/cleanup.sh termux-desktop  # remove the superseded Termux-native XFCE
 bash scripts/cleanup.sh config    # fresh XFCE profile inside the container
 bash scripts/cleanup.sh desktop   # + remove desktop packages from the container
