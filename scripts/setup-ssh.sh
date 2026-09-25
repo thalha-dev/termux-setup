@@ -81,12 +81,15 @@ log "Starting sshd (persistent detached session; survives this script)..."
 proot-distro kill "$CONTAINER" 2>/dev/null || true   # stop stale sessions incl. old sshd
 proot-distro login "$CONTAINER" --detach -- /usr/sbin/sshd -D -e
 
-PHONE_IP="$(getprop dhcp.wlan0.ipaddress 2>/dev/null || true)"
-[ -n "$PHONE_IP" ] || PHONE_IP="<phone-ip>"
+# HyperOS redacts dhcp.* props — read the IP from the interface instead
+PHONE_IP="$(ip -4 addr show wlan0 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}')"
+[ -n "$PHONE_IP" ] || PHONE_IP="$(ifconfig wlan0 2>/dev/null | grep -oE 'inet [0-9.]+' | awk '{print $2}')"
+[ -n "$PHONE_IP" ] || PHONE_IP="<unavailable — check Wi-Fi>"
 
 cat <<EOF
 
 sshd is UP on port ${PORT}, key-only, user '${UBU_USER}'.
+Phone IP on Wi-Fi right now: ${PHONE_IP}   (needs both devices on the SAME network)
 
 One-time on the MAC (creates the 'termux' shortcut — see mac/ssh-termux.sh):
   curl -fsSL https://raw.githubusercontent.com/thalha-dev/termux-setup/main/mac/ssh-termux.sh -o ssh-termux.sh
