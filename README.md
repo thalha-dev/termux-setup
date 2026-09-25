@@ -25,7 +25,9 @@ cd termux-setup
 
 bash bootstrap.sh                 # 1. update Termux + install proot-distro
 bash scripts/setup-ubuntu.sh      # 2. pull ubuntu:24.04, create user, sudo, locale
-proot-distro login ubuntu         # 3. you are in real Ubuntu (CLI)
+bash scripts/setup-dev.sh         # 3. toolchains (C/Go/Node/Python) + Neovim + LSPs
+bash scripts/setup-ssh.sh         # 4. container sshd, key-only, port 8023
+proot-distro login ubuntu         # you are in real Ubuntu (CLI)
 ```
 
 Utilities:
@@ -35,6 +37,27 @@ bash scripts/sanity.sh            # environment report: Android/HyperOS, killer 
 bash scripts/backup.sh            # container -> ~/storage/downloads/*.tar.gz
 bash scripts/restore.sh <file>    # restore (overwrites the container)
 ```
+
+## Work on the phone from your Mac (SSH)
+
+Full Ubuntu shell on the phone from the MacBook, with **zero secrets in this
+repo** — key-only auth, passwords hard-disabled:
+
+1. **On the Mac** (once): `ssh-keygen -t ed25519` if you don't have a key
+2. **On the phone**: `bash scripts/setup-ssh.sh` — paste your **public** key
+   (`.pub` only) when prompted; it configures and starts sshd on port 8023
+3. **On the Mac** (once): 
+   `curl -fsSL https://raw.githubusercontent.com/thalha-dev/termux-setup/main/mac/ssh-termux.sh -o ssh-termux.sh && bash ssh-termux.sh --setup <phone-ip>`
+   (IP: phone Settings → Wi-Fi → details, or run `getprop dhcp.wlan0.ipaddress` on the phone)
+4. **Forever after**: `ssh termux` — nvim, tmux, the whole Ubuntu CLI.
+   Files: `sftp termux`, `scp file termux:~/`, `rsync -av ./proj/ termux:~/proj/`
+
+`mac/ssh-termux.sh` just writes a normal `~/.ssh/config` block
+(`Host termux` → your key, port 8023); `--status` shows it, re-run `--setup`
+whenever the phone's IP changes. Security: key-only, LAN-only by default
+(use Tailscale for away-from-home access; never raw port-forwarding), host
+keys generated on-device, revoke anytime by editing the container's
+`~/.ssh/authorized_keys`.
 
 ## Phone settings checklist (HyperOS)
 
