@@ -34,9 +34,8 @@ log "proot-distro is ready (${PD_VERSION})."
 cat <<'EOF'
 
 Next steps:
-  bash scripts/install-x11.sh      # Termux:X11 companion package
   bash scripts/setup-ubuntu.sh     # pull Ubuntu 24.04 and configure it
-  proot-distro login ubuntu        # boot into Ubuntu
+  proot-distro login ubuntu        # boot into Ubuntu (CLI)
 
 If you haven't already, do the phone-settings checklist in README.md
 (battery saver "No restrictions", Autostart, phantom-process toggle).

@@ -29,7 +29,7 @@ best dumpsys deviceidle whitelist | grep -i com.termux >/dev/null 2>&1 \
   || echo "  termux NOT in doze whitelist -> Settings > Apps > Termux > Battery saver: No restrictions"
 
 section "Termux packages"
-for p in proot-distro proot termux-x11-nightly; do
+for p in proot-distro proot; do
   dpkg -s "$p" >/dev/null 2>&1 \
     && echo "  [ok] $p" || echo "  [MISSING] $p"
 done
