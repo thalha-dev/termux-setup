@@ -47,17 +47,20 @@ repo** — key-only auth, passwords hard-disabled:
 2. **On the phone**: `bash scripts/setup-ssh.sh` — paste your **public** key
    (`.pub` only) when prompted; it configures and starts sshd on port 8023
 3. **On the Mac** (once): 
-   `curl -fsSL https://raw.githubusercontent.com/thalha-dev/termux-setup/main/mac/ssh-termux.sh -o ssh-termux.sh && bash ssh-termux.sh --setup <phone-ip>`
-   (IP: phone Settings → Wi-Fi → details, or run `getprop dhcp.wlan0.ipaddress` on the phone)
+   `curl -fsSL https://raw.githubusercontent.com/thalha-dev/termux-setup/main/mac/ssh-termux.sh -o ssh-termux.sh && bash ssh-termux.sh --setup`
+   It **auto-discovers the phone** (subnet scan + your-key verification) — no
+   IP typing. And this is the last time you configure anything: the same
+   `ssh termux` works on home Wi-Fi, the Mac's phone-hotspot, or any other
+   network, because discovery reruns automatically whenever the IP changes.
 4. **Forever after**: `ssh termux` — nvim, tmux, the whole Ubuntu CLI.
    Files: `sftp termux`, `scp file termux:~/`, `rsync -av ./proj/ termux:~/proj/`
 
-`mac/ssh-termux.sh` just writes a normal `~/.ssh/config` block
-(`Host termux` → your key, port 8023); `--status` shows it, re-run `--setup`
-whenever the phone's IP changes. Security: key-only, LAN-only by default
-(use Tailscale for away-from-home access; never raw port-forwarding), host
-keys generated on-device, revoke anytime by editing the container's
-`~/.ssh/authorized_keys`.
+`mac/ssh-termux.sh` writes a normal `~/.ssh/config` block whose ProxyCommand
+resolves the phone per-connection: last-known IP → subnet scan for port 8023
+→ verified by your key actually authenticating (no false positives). One
+phone found = auto-connect; several = `--pick` list (fzf if installed);
+none = clear hints. `--status` shows the config; the host-key alias
+(`termux-phone`) means network switches never trigger MITM warnings.
 
 ## Phone settings checklist (HyperOS)
 

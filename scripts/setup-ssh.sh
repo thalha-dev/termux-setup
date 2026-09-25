@@ -90,7 +90,7 @@ sshd is UP on port ${PORT}, key-only, user '${UBU_USER}'.
 
 One-time on the MAC (creates the 'termux' shortcut — see mac/ssh-termux.sh):
   curl -fsSL https://raw.githubusercontent.com/thalha-dev/termux-setup/main/mac/ssh-termux.sh -o ssh-termux.sh
-  bash ssh-termux.sh --setup ${PHONE_IP}
+  bash ssh-termux.sh --setup          # auto-discovers this phone (or pass its IP)
 
 Then, forever, from the Mac:
   ssh termux                 # full Ubuntu shell on the phone

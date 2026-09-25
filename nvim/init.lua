@@ -83,16 +83,15 @@ require("lazy").setup({
     },
     {
       "neovim/nvim-lspconfig",
+      dependencies = { "hrsh7th/cmp-nvim-lsp" },
       config = function()
-        local lsp = require("lspconfig")
-        local caps = vim.lsp.protocol.make_client_capabilities()
+        local caps = require("cmp_nvim_lsp").default_capabilities()
         -- servers come from apt/npm (clangd, gopls, typescript-language-server,
-        -- bash-language-server) — deliberately no Mason under proot
-        lsp.clangd.setup({ capabilities = caps })
-        lsp.gopls.setup({ capabilities = caps })
-        lsp.ts_ls.setup({ capabilities = caps })
-        lsp.bashls.setup({ capabilities = caps })
-        lsp.pyright.setup({ capabilities = caps })
+        -- bash-language-server, pyright) — deliberately no Mason under proot.
+        -- nvim 0.12 native API (the old lspconfig.<server>.setup calls were
+        -- removed from nvim-lspconfig and aborted this config at startup).
+        vim.lsp.config("*", { capabilities = caps })
+        vim.lsp.enable({ "clangd", "gopls", "ts_ls", "bashls", "pyright" })
 
         vim.diagnostic.config({ severity_sort = true, float = { border = "rounded" } })
         vim.api.nvim_create_autocmd("LspAttach", {
@@ -140,9 +139,6 @@ require("lazy").setup({
             { name = "nvim_lsp" }, { name = "luasnip" },
           }, { { name = "buffer" }, { name = "path" } }),
         })
-        local capabilities = require("cmp_nvim_lsp").default_capabilities()
-        -- re-applied to all clients that attach after cmp loads
-        vim.lsp.config("*", { capabilities = capabilities })
       end,
     },
   },

@@ -49,10 +49,16 @@ proot-distro login "$CONTAINER" --user "$UBU_USER" -- /bin/bash -lc '
   sudo ln -sf "$HOME/go/bin/gopls" /usr/local/bin/gopls
 ' || warn "gopls install failed — LSP for Go will be unavailable."
 
-log "Installing TypeScript language server + bash language server (npm)..."
+log "Installing TypeScript language server + bash language server + pyright (npm)..."
 proot-distro login "$CONTAINER" -- /bin/bash -s <<'EOS' || warn "npm servers failed"
 set -e
-npm install -g typescript typescript-language-server bash-language-server
+# Ubuntu 24.04 ships Node 18 (EOL, and newer LSP tooling wants >=20):
+# upgrade to Node 22 via NodeSource when needed
+if [ "$(node -p 'process.versions.node.split(".")[0]')" -lt 20 ]; then
+  curl -fsSL https://deb.nodesource.com/setup_22.x | bash - >/dev/null
+  apt-get install -y nodejs
+fi
+npm install -g typescript typescript-language-server bash-language-server pyright
 npm cache clean --force
 EOS
 
@@ -93,6 +99,8 @@ log "Bootstrapping plugins headlessly (first run downloads ~100 MB)..."
 proot-distro login "$CONTAINER" --user "$UBU_USER" -- /bin/bash -lc '
   export PATH="/usr/local/bin:$PATH"
   nvim --headless "+Lazy! sync" +TSUpdate +qa 2>&1 | tail -5 || true
+  # config sanity: an error here means init.lua aborted (print shows why)
+  nvim --headless "+lua print(\"nvim-config-ok\")" +qa 2>&1 | tail -3
 '
 
 log "Git identity (stored only in the container's ~/.gitconfig)..."
