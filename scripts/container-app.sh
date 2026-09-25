@@ -35,5 +35,12 @@ if ! grep -q "^${UBU_USER}:" "$ROOTFS/etc/passwd" 2>/dev/null; then
 fi
 
 log "Launching '${APP}' from container '${CONTAINER}' as ${UBU_USER} on ${DISPLAY_NUM}..."
+# GPU: use the VirGL proxy when its server is up, else software rendering
+if pgrep -f virgl_test_server >/dev/null 2>&1; then
+  GPU_ENV="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2"
+else
+  GPU_ENV="LIBGL_ALWAYS_SOFTWARE=1"
+fi
+# shellcheck disable=SC2086
 exec proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 -- \
-  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; export LIBGL_ALWAYS_SOFTWARE=1; exec '${APP}'"
+  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; export ${GPU_ENV}; exec '${APP}'"

@@ -1,46 +1,76 @@
 #!/data/data/com.termux/files/usr/bin/bash
-# desktop.sh — launch Termux:X11 + an XFCE desktop running NATIVELY in Termux.
+# desktop.sh — Termux:X11 + XFCE running INSIDE the Ubuntu container, with a
+# GPU acceleration pipeline.
 #
-# Why Termux-side and not inside the Ubuntu container: the container route
-# needs --shared-tmp socket binds, cross-prefix user mapping and proot GL,
-# all of which produced black screens on this device. The official
-# termux-x11 README recommends exactly this setup: `pkg install xfce` from
-# the x11-repo and run it on DISPLAY=:1 directly in Termux. The Ubuntu
-# container stays your CLI/server Linux; run its GUI apps on this desktop
-# with scripts/container-app.sh.
-#
-# Flow:
-#   1. start the X server (background) and open the Termux:X11 activity
-#   2. disable xfwm4 compositing (black desktop / vanishing panel on X11)
-#   3. start XFCE in a plain background Termux shell, logging to a file
+# Lessons from this device (Redmi Note 13 Pro 5G, SD 7s Gen 2 / Adreno 710),
+# all baked in:
+#   * the session script must NOT live at rootfs/tmp — --shared-tmp binds
+#     Termux's $PREFIX/tmp OVER the container's /tmp, shadowing it (use /opt)
+#   * proot-distro --detach reads the command as a FILE argument, never stdin
+#   * the X server runs under app_process: kill it with pkill -f, not pkill
+#   * xfwm4 compositing = black desktop / vanishing panel on Termux:X11: off
+#   * a stale dbus-daemon exports dead socket addresses ("Unable to contact
+#     settings server") — stale buses are killed with the session
+#   * GPU: Turnip does not support Adreno 710 (documented exception), so the
+#     acceleration path here is VirGL (virgl_test_server_android in Termux +
+#     GALLIUM_DRIVER=virpipe in the container), with llvmpipe fallback.
+#     Turnip/Zink can be tried per-app later — see README "GPU acceleration".
 set -Eeuo pipefail
 
 log()  { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
 
+CONTAINER="${PD_CONTAINER_NAME:-ubuntu}"
+UBU_USER="${PD_UBUNTU_USER:-thalha}"
 DISPLAY_NUM="${PD_DISPLAY:-:1}"
 X11_ARGS="${PD_X11_ARGS:-}"
-LOG="$HOME/.cache/xfce-session.log"
+GPU_MODE="${PD_GPU:-auto}"            # auto | virgl | llvmpipe
+ROOTFS="$PREFIX/var/lib/proot-distro/containers/$CONTAINER/rootfs"
 
 [ -n "${TERMUX_VERSION:-}" ] || die "Run this inside Termux."
+[ -d "$ROOTFS" ] || die "Container '$CONTAINER' not found — run scripts/setup-ubuntu.sh first."
+[ -x "$ROOTFS/usr/bin/startxfce4" ] || \
+  die "XFCE not installed in the container — run scripts/install-desktop.sh first."
 command -v termux-x11 >/dev/null 2>&1 || die "termux-x11 missing — run scripts/install-x11.sh first."
-command -v startxfce4 >/dev/null 2>&1 || \
-  die "XFCE (Termux side) not installed — run scripts/install-desktop.sh first."
 
-mkdir -p "$HOME/.cache"
+if ! grep -q "^${UBU_USER}:" "$ROOTFS/etc/passwd" 2>/dev/null; then
+  warn "User '$UBU_USER' not found in the container — launching as root."
+  UBU_USER="root"
+fi
 
-log "Stopping any stale X server / XFCE session..."
-# -f: the X server runs under app_process; its name only appears in the
-# cmdline, so a bare 'pkill termux-x11' never matches it.
+# ── 1. clean slate ──────────────────────────────────────────────────────────
+log "Stopping stale X server / desktop / dbus..."
 pkill -f termux-x11 2>/dev/null || true
 pkill -f 'startxfce4|xfce4-session|xfwm4|xfdesktop|xfce4-panel|xfsettingsd|xfconfd' 2>/dev/null || true
-# a stale dbus-daemon hands out a dead socket address -> xfsettingsd fails
-# with 'Could not connect: No such file or directory'
+pkill -f 'virgl_test_server' 2>/dev/null || true
 pkill -f dbus-daemon 2>/dev/null || true
+proot-distro kill "$CONTAINER" 2>/dev/null || true
 sleep 1
 
-log "Starting Termux:X11 server on display ${DISPLAY_NUM}..."
+# ── 2. GPU acceleration (VirGL proxy, llvmpipe fallback) ───────────────────
+GPU_ENV=""
+gpu_note="llvmpipe (software rendering)"
+if [ "$GPU_MODE" != "llvmpipe" ]; then
+  if command -v virgl_test_server_android >/dev/null 2>&1; then
+    log "Starting VirGL GPU proxy server (Termux side)..."
+    virgl_test_server_android >"$HOME/.cache/virgl.log" 2>&1 &
+    sleep 2
+    if pgrep -f virgl_test_server >/dev/null 2>&1; then
+      GPU_ENV="GALLIUM_DRIVER=virpipe MESA_GL_VERSION_OVERRIDE=4.3COMPAT MESA_GLES_VERSION_OVERRIDE=3.2 vblank_mode=0"
+      gpu_note="virgl (GPU-accelerated via Android GL)"
+      log "VirGL server is up — container apps will use $gpu_note"
+    else
+      warn "VirGL server failed to start (see ~/.cache/virgl.log) — falling back to llvmpipe."
+    fi
+  else
+    warn "virgl_test_server_android not installed — run scripts/install-x11.sh (or pkg install virglrenderer-android)."
+  fi
+fi
+[ -n "$GPU_ENV" ] || GPU_ENV="LIBGL_ALWAYS_SOFTWARE=1 vblank_mode=0"
+
+# ── 3. X server ─────────────────────────────────────────────────────────────
+log "Starting Termux:X11 on display ${DISPLAY_NUM}..."
 # $X11_ARGS is intentionally unquoted: it may hold multiple flags
 # shellcheck disable=SC2086
 termux-x11 "$DISPLAY_NUM" $X11_ARGS >"$HOME/.cache/termux-x11.log" 2>&1 &
@@ -50,48 +80,83 @@ log "Opening the Termux:X11 activity on the phone..."
 am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 || \
   warn "Could not auto-open the app — tap the Termux:X11 icon on your launcher."
 
-log "Preparing the session (no compositor, sane runtime dir)..."
-# NOTE: Termux does not export $USER — use id(1); this died under set -u once
-RUNTIME_UID="$(id -u 2>/dev/null || echo 0)"
-export XDG_RUNTIME_DIR="$PREFIX/tmp/xdg-runtime-$RUNTIME_UID"
-mkdir -p "$XDG_RUNTIME_DIR"; chmod 700 "$XDG_RUNTIME_DIR"
+# ── 4. session orchestrator (inside the container, /opt — never /tmp!) ─────
+log "Writing session orchestrator into the container..."
+SESSION_SH="$ROOTFS/opt/xd-session.sh"
+rm -f "$ROOTFS/opt/xd-session.log"
+cat > "$SESSION_SH" <<EOF
+#!/bin/bash
+# generated by scripts/desktop.sh — runs INSIDE the container
+set -u
+exec >>/opt/xd-session.log 2>&1
+echo "=== xd-session start: \$(date) user=\$(id -un) display=${DISPLAY_NUM} ==="
+
+export DISPLAY="${DISPLAY_NUM}"
+export XDG_RUNTIME_DIR="\$HOME/.cache/xdg-runtime"
+mkdir -p "\$XDG_RUNTIME_DIR"; chmod 700 "\$XDG_RUNTIME_DIR"
+export GDK_BACKEND=x11
+# GPU mode chosen on the Termux side (virpipe = VirGL proxy, or llvmpipe):
+export ${GPU_ENV}
+
+# wait until the X server accepts connections (max ~40 s)
+if command -v xdpyinfo >/dev/null 2>&1; then
+  i=0; until xdpyinfo >/dev/null 2>&1; do
+    i=\$((i+1)); [ \$i -ge 40 ] && break; sleep 1
+  done
+  echo "x server reachable after \${i}s"
+else
+  echo "xdpyinfo not installed — sleeping 10 s instead"
+  sleep 10
+fi
 
 # compositing under Termux:X11 = black desktop / missing panel; keep it off
-xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/dev/null 2>&1 || true
+# (must run inside the dbus session so xfconfd is reachable)
 
-log "Starting XFCE (Termux-native, log: $LOG)..."
-: > "$LOG"
-# shellcheck disable=SC2016  # the $(...) must expand inside the session shell
-nohup bash -c '
-  export DISPLAY="'"${DISPLAY_NUM}"'"
-  # fresh session bus; its address must be in the env of EVERY XFCE
-  # component, or xfsettingsd dies with "Unable to contact settings server"
-  eval "$(dbus-launch --sh-syntax)" || exit 1
-  echo "dbus: $DBUS_SESSION_BUS_ADDRESS"
+echo "starting XFCE..."
+exec dbus-launch --exit-with-session bash -c '
+  xfconf-query -c xfwm4 -p /general/use_compositing --create -t bool -s false >/dev/null 2>&1 || true
+  echo "compositor disabled; session env: ${GPU_ENV}"
   exec startxfce4
-' >>"$LOG" 2>&1 &
+'
+EOF
+chmod 755 "$SESSION_SH"
 
-# wait for the panel to appear (max 60 s), then report state
-up=0
-for _ in $(seq 1 60); do
-  if pgrep -af startxfce4 >/dev/null 2>&1 && pgrep -x xfwm4 >/dev/null 2>&1; then up=1; break; fi
+log "Launching the desktop inside the container as '${UBU_USER}' (GPU: ${gpu_note})..."
+proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 --detach -- \
+  /bin/bash /opt/xd-session.sh
+
+# ── 5. liveness + panel wait ────────────────────────────────────────────────
+started=0
+for _ in $(seq 1 15); do
+  [ -s "$ROOTFS/opt/xd-session.log" ] && { started=1; break; }
   sleep 1
 done
+[ "$started" = 1 ] || die "session never started (no log). Debug it live:
+  proot-distro login $CONTAINER --user $UBU_USER --shared-tmp --shared-x11 -- /bin/bash /opt/xd-session.sh"
+
+log "Waiting for XFCE to come up (max 60 s)..."
+up=0
+for _ in $(seq 1 60); do
+  if pgrep -f 'xfce4-session' >/dev/null 2>&1 && pgrep -f 'xfwm4' >/dev/null 2>&1; then up=1; break; fi
+  sleep 1
+done
+
 if [ "$up" = 1 ]; then
-  log "XFCE is up. Check the Termux:X11 app."
+  log "XFCE is up (GPU: ${gpu_note}). Check the Termux:X11 app."
 else
   warn "session not detected after 60 s — last log lines:"
-  tail -20 "$LOG" || true
+  tail -20 "$ROOTFS/opt/xd-session.log" || true
 fi
 
 cat <<EOF
 
 Desktop running. Useful:
-  tail -40 $LOG                   # session log
-  pkill -f xfce4-session          # stop the desktop
-  bash scripts/desktop.sh         # restart
-  bash scripts/container-app.sh   # run an app from the Ubuntu container on this desktop
+  tail -40 $ROOTFS/opt/xd-session.log   # container session log
+  proot-distro kill ${CONTAINER} && pkill -f termux-x11   # stop everything
+  bash scripts/desktop.sh               # restart
 
 Black screen?  PD_X11_ARGS="-legacy-drawing" bash scripts/desktop.sh
-Swapped colours?  PD_X11_ARGS="-force-bgra" bash scripts/desktop.sh
+No GPU?       PD_GPU=llvmpipe bash scripts/desktop.sh   (default: PD_GPU=auto)
+GL check:     bash scripts/container-app.sh glxgears
+Benchmark:    bash scripts/container-app.sh glmark2
 EOF
