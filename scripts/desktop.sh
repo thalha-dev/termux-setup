@@ -81,6 +81,11 @@ am start --user 0 -n com.termux.x11/com.termux.x11.MainActivity >/dev/null 2>&1 
   warn "Could not auto-open the app — tap the Termux:X11 icon on your launcher."
 
 # ── 4. session orchestrator (inside the container, /opt — never /tmp!) ─────
+# Firefox needs a real /dev/shm for tab IPC — bind a Termux-side dir over it
+# (Android has no /dev/shm of its own) and disable Firefox sandboxes that
+# cannot exist under proot (seccomp-based), or tabs crash on signal 11.
+mkdir -p "$PREFIX/tmp/xd-shm"; chmod 777 "$PREFIX/tmp/xd-shm"
+
 log "Writing session orchestrator into the container..."
 SESSION_SH="$ROOTFS/opt/xd-session.sh"
 rm -f "$ROOTFS/opt/xd-session.log"
@@ -97,6 +102,11 @@ mkdir -p "\$XDG_RUNTIME_DIR"; chmod 700 "\$XDG_RUNTIME_DIR"
 export GDK_BACKEND=x11
 # GPU mode chosen on the Termux side (virpipe = VirGL proxy, or llvmpipe):
 export ${GPU_ENV}
+# Firefox under proot: /dev/shm is bind-mounted from Termux (see desktop.sh);
+# the seccomp content sandbox cannot work under proot and crashes tabs.
+export MOZ_DISABLE_CONTENT_SANDBOX=1
+export MOZ_DISABLE_RDD_SANDBOX=1
+export MOZ_DISABLE_GPU_SANDBOX=1
 
 # wait until the X server accepts connections (max ~40 s)
 if command -v xdpyinfo >/dev/null 2>&1; then
@@ -122,7 +132,9 @@ EOF
 chmod 755 "$SESSION_SH"
 
 log "Launching the desktop inside the container as '${UBU_USER}' (GPU: ${gpu_note})..."
-proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 --detach -- \
+proot-distro login "$CONTAINER" --user "$UBU_USER" \
+  --bind "$PREFIX/tmp/xd-shm:/dev/shm" \
+  --shared-tmp --shared-x11 --detach -- \
   /bin/bash /opt/xd-session.sh
 
 # ── 5. liveness + panel wait ────────────────────────────────────────────────

@@ -34,6 +34,9 @@ if ! grep -q "^${UBU_USER}:" "$ROOTFS/etc/passwd" 2>/dev/null; then
   UBU_USER="root"
 fi
 
+# Firefox's tab IPC needs a writable /dev/shm (Android has none to inherit)
+mkdir -p "$PREFIX/tmp/xd-shm"; chmod 777 "$PREFIX/tmp/xd-shm"
+
 log "Launching '${APP}' from container '${CONTAINER}' as ${UBU_USER} on ${DISPLAY_NUM}..."
 # GPU: use the VirGL proxy when its server is up, else software rendering
 if pgrep -f virgl_test_server >/dev/null 2>&1; then
@@ -42,5 +45,8 @@ else
   GPU_ENV="LIBGL_ALWAYS_SOFTWARE=1"
 fi
 # shellcheck disable=SC2086
-exec proot-distro login "$CONTAINER" --user "$UBU_USER" --shared-tmp --shared-x11 -- \
-  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; export ${GPU_ENV}; exec '${APP}'"
+exec proot-distro login "$CONTAINER" --user "$UBU_USER" \
+  --bind "$PREFIX/tmp/xd-shm:/dev/shm" \
+  --shared-tmp --shared-x11 -- \
+  /bin/bash -lc "export DISPLAY='${DISPLAY_NUM}'; export ${GPU_ENV}; \
+export MOZ_DISABLE_CONTENT_SANDBOX=1 MOZ_DISABLE_RDD_SANDBOX=1 MOZ_DISABLE_GPU_SANDBOX=1; exec '${APP}'"
